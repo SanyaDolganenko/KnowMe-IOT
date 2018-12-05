@@ -82,7 +82,7 @@ void login() {
       Serial.println(token);
     }
   } else {
-    setColorOfIndicator(2);
+    setColorOfIndicator(COLOR_RED);
   }
   http.end();
 }
@@ -90,13 +90,13 @@ void login() {
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!processingNFC) {
-      setColorOfIndicator(1);
+//      setColorOfIndicator(1);
       getMsgFromAndroid();
     }
   } else {
-    setColorOfIndicator(2);
+    setColorOfIndicator(COLOR_RED);
   }
-  delay(3000);
+  delay(2000);
 }
 
 void setColorOfIndicator(int color) {
@@ -112,16 +112,22 @@ void setColorOfIndicator(int color) {
       strip.show();
       break;
     case COLOR_GREEN:
-      Serial.println("Setting color to orange");
+      Serial.println("Setting color to green");
       strip.setPixelColor(0, 0, 255, 0);
       strip.show();
       break;
     case COLOR_RED:
-      Serial.println("Setting color to orange");
+      Serial.println("Setting color to red");
       strip.setPixelColor(0, 255, 0, 0);
       strip.show();
       break;
   }
+}
+
+void blink(int color) {
+  setColorOfIndicator(color);
+  delay(300);
+  setColorOfIndicator(0);
 }
 
 
@@ -165,7 +171,7 @@ void getMsgFromAndroid() {
     String message = readMsg(record);
     Serial.println(message);
     checkUserOnServer(message);
-    setColorOfIndicator(3);
+    //    setColorOfIndicator(3);
   } else {
     Serial.println("Message is empty");
   }
@@ -203,6 +209,10 @@ void checkUserOnServer(String userId) {
   Serial.println(httpCode);   //Print HTTP return code
   Serial.println("Got response");
   Serial.println(payload);    //Print request response payload
-
+  if (httpCode == 200) {
+    blink(COLOR_GREEN);
+  } else {
+    blink(COLOR_RED);
+  }
   http.end();  //Close connection
 }
