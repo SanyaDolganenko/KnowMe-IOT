@@ -17,14 +17,13 @@ PN532_SPI pn532spi(SPI, 5);
 SNEP nfc(pn532spi);
 uint8_t ndefBuf[128];
 
-const String eventId = "5bdc3bc1bc9fa03493e7d382";
-//const char* server_login = "service01@gmail.com";
-//const char* server_password = "service_device_01";
+const char* server_login = "service01@gmail.com";
+const char* server_password = "service_device_01";
 
 // WiFi parameters to be configured
 const char* ssid = "Quartet";
-//const char* ssid = "Oleksandr";
 const char* password = "EQPACJDFP8";
+//const char* ssid = "Oleksandr";
 //const char* password = "Dolganenko";
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, LED, NEO_GRB + NEO_KHZ800);
 const int COLOR_NONE = 0;
@@ -35,6 +34,8 @@ const int COLOR_GREEN = 3;
 bool processingNFC = false;
 //char* token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjVjMDdhZTNiOWExY2I5MDAwNDcxMWQwOCIsImlhdCI6MTU0NDAzMTAyMX0.XOSx7dSdqJRNw6Dq_NughenvEbZAbEOSyineE3A9XP4"; //Length is 148
 char* token = "";
+//char * eventId = "5bdc3bc1bc9fa03493e7d382";
+String eventId;
 HTTPClient http;
 
 void setup(void) {
@@ -46,6 +47,7 @@ void setup(void) {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    blink(COLOR_ORANGE);
   }
   //print a new line, then print WiFi connected and the IP address
   Serial.println("");
@@ -60,7 +62,14 @@ void setup(void) {
 void login() {
   http.begin("http://knowme-server.herokuapp.com/auth/login?lang=en");      //Specify request destination
   http.addHeader("Content-Type", "application/json");  //Specify content-type header
-  int httpCode = http.POST("{ \"email\":\"service01@gmail.com\",\"password\":\"service_device_01\"}"); //Send the request
+  const int capacity = JSON_OBJECT_SIZE(2);
+  StaticJsonBuffer<capacity> jb;
+  JsonObject& obj = jb.createObject();
+  obj.set("email", server_login);
+  obj.set("password", server_password);
+  char request[150];
+  obj.printTo(request);
+  int httpCode = http.POST(request); //Send the request
   String payload = http.getString();                  //Get the response payload
   http.writeToStream(&Serial);
   Serial.println(httpCode);   //Print HTTP return code
@@ -80,6 +89,9 @@ void login() {
         strcpy( token, tokenConst);
       }
       Serial.println(token);
+      const char* eventIdConst = root["user"]["serviceEventId"];
+      eventId = String(eventIdConst);
+      Serial.println(eventId);
     }
   } else {
     setColorOfIndicator(COLOR_RED);
@@ -90,7 +102,7 @@ void login() {
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!processingNFC) {
-//      setColorOfIndicator(1);
+      //      setColorOfIndicator(1);
       getMsgFromAndroid();
     }
   } else {
@@ -102,12 +114,10 @@ void loop() {
 void setColorOfIndicator(int color) {
   switch (color) {
     case COLOR_NONE:
-      Serial.println("Setting color to blank");
       strip.setPixelColor(0, 0, 0, 0);
       strip.show();
       break;
     case COLOR_ORANGE:
-      Serial.println("Setting color to orange");
       strip.setPixelColor(0, 255, 165, 0);
       strip.show();
       break;
@@ -197,11 +207,14 @@ void checkUserOnServer(String userId) {
   http.begin("http://knowme-server.herokuapp.com/service/check-user-for-event");      //Specify request destination
   http.addHeader("Content-Type", "application/json");  //Specify content-type header
   http.addHeader("token", token);
-  String startPost = "{\"userId\":\"";
-  String middlePost = "\", \"eventId\":\"";
-  String endPost = "\"}";
-  String request = startPost + userId + middlePost + eventId + endPost;
-  Serial.println("Printing request:");
+  const int capacity = JSON_OBJECT_SIZE(2);
+  StaticJsonBuffer<capacity> jb;
+  JsonObject& obj = jb.createObject();
+  obj.set("userId", userId.c_str());
+  obj.set("eventId", eventId.c_str());
+  char request[110];
+  obj.printTo(request);
+  Serial.println("Printing formed request:");
   Serial.println(request);
   int httpCode = http.POST(request);   //Send the request
   String payload = http.getString();                  //Get the response payload
