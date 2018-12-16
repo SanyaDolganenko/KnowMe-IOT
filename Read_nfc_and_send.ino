@@ -21,20 +21,22 @@ const char* server_login = "service01@gmail.com";
 const char* server_password = "service_device_01";
 
 // WiFi parameters to be configured
-const char* ssid = "Quartet";
-const char* password = "EQPACJDFP8";
-//const char* ssid = "Oleksandr";
-//const char* password = "Dolganenko";
+//const char* ssid = "Quartet";
+//const char* password = "EQPACJDFP8";
+//String ssid = "Oleksandr";
+//String password = "Dolganenko";
+const int TIMEOUT_DURATION_SEC = 5;
+//const char* ssid = "nure_5G";
+//const char* password = "";
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, LED, NEO_GRB + NEO_KHZ800);
 const int COLOR_NONE = 0;
 const int COLOR_ORANGE = 1;
 const int COLOR_RED = 2;
 const int COLOR_GREEN = 3;
 
+bool isInServiceMode = false;
 bool processingNFC = false;
-//char* token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjVjMDdhZTNiOWExY2I5MDAwNDcxMWQwOCIsImlhdCI6MTU0NDAzMTAyMX0.XOSx7dSdqJRNw6Dq_NughenvEbZAbEOSyineE3A9XP4"; //Length is 148
 char* token = "";
-//char * eventId = "5bdc3bc1bc9fa03493e7d382";
 String eventId;
 HTTPClient http;
 
@@ -42,24 +44,40 @@ void setup(void) {
   pinMode(OUT, OUTPUT);
   strip.begin();
   Serial.begin(115200);
-  Serial.println("Initializing device...");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  Serial.println("Initializing device");
+  connectAndLogin("Oleksandr", "Dolganenko");
+}
+
+void connectAndLogin(String ssid, String password) {
+  WiFi.begin(ssid.c_str(), password.c_str());
+  Serial.println("Connecting to WiFi...");
+  int counter = 0;
+  while (WiFi.status() != WL_CONNECTED && counter <= TIMEOUT_DURATION_SEC) {
+    delay(1000);
     Serial.print(".");
     blink(COLOR_ORANGE);
+    counter++;
   }
-  //print a new line, then print WiFi connected and the IP address
   Serial.println("");
-  Serial.println("WiFi connected");
-  // Print the IP address
-  Serial.println(WiFi.localIP());
-
-  setColorOfIndicator(0);
-  login();
+  if (counter >= TIMEOUT_DURATION_SEC && WiFi.status() != WL_CONNECTED) {
+    Serial.println("Unable to connect. Turning to service mode.");
+    setColorOfIndicator(COLOR_ORANGE);
+    isInServiceMode = true;
+    while (WiFi.status() != WL_CONNECTED) {
+      getMsgFromAndroid(true);
+    }
+  } else  {
+    isInServiceMode = false;
+    Serial.println("WiFi connected");
+    // Print the IP address
+    Serial.println(WiFi.localIP());
+    setColorOfIndicator(0);
+    login();
+  }
 }
 
 void login() {
+  Serial.println("Logging in...");
   http.begin("http://knowme-server.herokuapp.com/auth/login?lang=en");      //Specify request destination
   http.addHeader("Content-Type", "application/json");  //Specify content-type header
   const int capacity = JSON_OBJECT_SIZE(2);
@@ -100,11 +118,12 @@ void login() {
 }
 
 void loop() {
+  Serial.println("Main loop");
+  if (!processingNFC) {
+    getMsgFromAndroid(false);
+  }
   if (WiFi.status() == WL_CONNECTED) {
-    if (!processingNFC) {
-      //      setColorOfIndicator(1);
-      getMsgFromAndroid();
-    }
+
   } else {
     setColorOfIndicator(COLOR_RED);
   }
@@ -170,7 +189,7 @@ void blink(int color) {
 
 
 
-void getMsgFromAndroid() {
+void getMsgFromAndroid(boolean serviceOnly) {
   Serial.println("Waiting for message from Peer");
   int msgSize = nfc.read(ndefBuf, sizeof(ndefBuf));
   if (msgSize > 0) {
@@ -180,10 +199,47 @@ void getMsgFromAndroid() {
     NdefRecord record = msg.getRecord(0);  //read 1 record
     String message = readMsg(record);
     Serial.println(message);
-    checkUserOnServer(message);
-    //    setColorOfIndicator(3);
+    String configs[2];
+
+    if (message.indexOf("|") >= 0) {
+
+      int r  = 0;
+      int t = 0;
+      for (int i = 0; i < message.length(); i++)
+      {
+        if (message.charAt(i) == '|' || i == message.length() - 1)
+        {
+          if (i == message.length() - 1) {
+            i++;
+          }
+          if (t <= 2 ) {
+            configs[t] = message.substring(r, i);
+            r = (i + 1);
+            t++;
+          }
+        }
+      }
+      String ssid = configs[0];
+      String password = configs[1];
+      Serial.println("Received config message");
+      Serial.println(ssid);
+      Serial.println(password);
+      connectAndLogin(ssid, password);
+    } else {
+      if (serviceOnly) {
+        Serial.println("Received service message is not in correct format.");
+        blink(COLOR_RED);
+        setColorOfIndicator(COLOR_ORANGE);
+      } else {
+        checkUserOnServer(message);
+      }
+    }
   } else {
     Serial.println("Message is empty");
+    if (isInServiceMode) {
+      blink(COLOR_RED);
+      setColorOfIndicator(COLOR_ORANGE);
+    }
   }
 }
 
